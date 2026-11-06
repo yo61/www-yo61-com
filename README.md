@@ -40,8 +40,9 @@ The Content Security Policy comes in two halves:
   `yo61.com` hosts), and `X-Robots-Tag: noindex` on every `pages.dev` hostname,
   deployment URLs included.
 
-The CSP already allows Cloudflare Web Analytics' two origins, ready for its beacon (YO61-41), and
-no other third party. Pages carry no inline `style=` attributes, which the CSP would refuse.
+The CSP allows Cloudflare Web Analytics' two origins and no other third party. The base layout
+includes the beacon, `beacon.min.js`, by hand, with the token from `yo61/infrastructure`'s
+`site_token` output. Pages carry no inline `style=` attributes, which the CSP would refuse.
 
 `pnpm build` runs `scripts/check-build.ts` over `dist/`; its `checkBuild` docstring lists what
 fails the build. It holds its own copy of both CSP halves and the HSTS max-age, so a change to
