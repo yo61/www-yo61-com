@@ -1,0 +1,14 @@
+# frame-ancestors only works as a header; the meta tag from astro.config.ts carries the rest.
+/*
+  Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'
+  Content-Security-Policy: object-src 'none'; form-action 'self'
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  Strict-Transport-Security: max-age=31536000
+
+# Every pages.dev hostname stays out of search, deployment URLs included; www.yo61.com is canonical.
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex

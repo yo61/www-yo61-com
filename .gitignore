@@ -1,0 +1,8 @@
+/node_modules
+/dist/
+/.astro/
+/coverage
+*.tsbuildinfo
+.DS_Store
+.env*.local
+.lastlight/

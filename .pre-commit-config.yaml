@@ -1,0 +1,44 @@
+# Without this, `prek install` wires only the pre-commit stage and commit messages go unlinted.
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: https://github.com/jdx/jactionlint
+    rev: baa8d685e2b27ff5821558c9eeabb2051c1da61b # frozen: v2.4.0
+    hooks:
+      - id: jactionlint
+
+  - repo: local
+    hooks:
+      - id: oxlint
+        name: oxlint
+        entry: pnpm lint
+        language: system
+        types_or: [ts, javascript, astro]
+        pass_filenames: false
+      - id: oxfmt
+        name: oxfmt --check
+        entry: pnpm exec oxfmt --check
+        language: system
+        types_or: [ts, javascript, json, yaml, css]
+        pass_filenames: false
+      # oxfmt does not format .astro files; prettier does, for those files only.
+      - id: prettier
+        name: prettier --check (.astro)
+        entry: pnpm exec prettier --check
+        language: system
+        files: \.astro$

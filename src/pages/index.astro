@@ -1,0 +1,14 @@
+---
+import Base from "#src/layouts/Base.astro";
+import { contact, strapline } from "#src/content.ts";
+---
+
+<Base title="yo61">
+  <h1 class="strapline">{strapline}</h1>
+  <p class="contact">
+    <a class="cta" href={`mailto:${contact}`}>
+      Get in touch →
+    </a>
+    <span class="address">{contact}</span>
+  </p>
+</Base>

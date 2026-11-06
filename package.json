@@ -1,0 +1,35 @@
+{
+  "name": "www-yo61-com",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#*": "./*"
+  },
+  "scripts": {
+    "build": "astro build && node scripts/check-build.ts dist",
+    "dev": "astro dev",
+    "format": "oxfmt && prettier --write \"**/*.astro\"",
+    "format:check": "oxfmt --check && prettier --check \"**/*.astro\"",
+    "lint": "oxlint",
+    "preview": "astro preview",
+    "test": "vitest run",
+    "types:check": "astro sync && tsc --noEmit && astro check"
+  },
+  "dependencies": {
+    "astro": "7.4.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@types/node": "26.6.6",
+    "oxfmt": "0.76.0",
+    "oxlint": "1.91.0",
+    "prettier": "3.9.10",
+    "prettier-plugin-astro": "1.1.2",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=26.0.0"
+  }
+}
