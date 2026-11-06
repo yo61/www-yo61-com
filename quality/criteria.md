@@ -13,6 +13,21 @@
 
 ## Last triggered: never
 
+## Category: Security headers
+
+## Criteria:
+
+    - A change to the CSP (`astro.config.ts` `security.csp`, or a `Content-Security-Policy` line
+      in `public/_headers`) or to HSTS changes `scripts/check-build.ts`'s copy in the same
+      commit, and the commit or PR says why the policy changed
+
+## Severity: blocking
+
+## Source: decisions/2026-11-06-build-check-csp-values.md (every CSP or HSTS change is a
+deliberate edit, made in both copies); YO61-52
+
+## Last triggered: never
+
 ## Category: Workflows
 
 ## Criteria:
