@@ -9,6 +9,8 @@ interface Props {
 
 const { title, canonical = true } = Astro.props;
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
+// The site_token output of yo61/infrastructure's Web Analytics site.
+const analyticsBeacon = JSON.stringify({ token: "13e1cc9348ad40f4b7b9e74b9baba39c" });
 ---
 
 <!doctype html>
@@ -19,6 +21,12 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
     <title>{title}</title>
     <meta name="description" content={`yo61: ${strapline}`} />
     {canonical && <link rel="canonical" href={canonicalUrl} />}
+    <script
+      is:inline
+      defer
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon={analyticsBeacon}
+    ></script>
   </head>
   <body>
     <header class="band">

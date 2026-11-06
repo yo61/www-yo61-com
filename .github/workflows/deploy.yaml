@@ -1,0 +1,43 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # Redeploys main by hand. The production environment refuses a run on any other branch.
+  workflow_dispatch:
+
+permissions: {}
+
+# One production deploy at a time, each to completion.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # The Cloudflare secrets live only on environments that accept runs on main.
+    environment:
+      name: production
+      url: https://www-yo61-com.pages.dev
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No cache in the job that produces what is published.
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          install_args: node pnpm
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      # Builds to dist/, then runs scripts/check-build.ts over it.
+      - run: pnpm build
+      - run: pnpm exec wrangler pages deploy dist --project-name="$PROJECT" --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
