@@ -1,0 +1,9 @@
+# Refuse any package published less than 24 hours ago, whatever pulls it in.
+minimumReleaseAge: 1440
+
+# No dependency or project lifecycle script runs on install.
+ignoreScripts: true
+
+engineStrict: true
+
+savePrefix: ""

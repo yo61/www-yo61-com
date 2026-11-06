@@ -1,0 +1,36 @@
+---
+import "#src/styles/global.css";
+import { links, strapline } from "#src/content.ts";
+
+interface Props {
+  title: string;
+  canonical?: boolean;
+}
+
+const { title, canonical = true } = Astro.props;
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={`yo61: ${strapline}`} />
+    {canonical && <link rel="canonical" href={canonicalUrl} />}
+  </head>
+  <body>
+    <header class="band">
+      <p class="wordmark">yo61</p>
+    </header>
+    <main class="content">
+      <slot />
+    </main>
+    <footer>
+      {links.map((link) => (
+        <a href={link.href}>{link.label}</a>
+      ))}
+    </footer>
+  </body>
+</html>
