@@ -1,0 +1,41 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  // Dependabot keeps npm, the action SHAs and the pre-commit hooks (.github/dependabot.yaml), and
+  // supports neither mise.toml nor runner images. Renovate owns those two: the mise.toml tools
+  // and the workflows' runs-on image. github-actions runs only for github-runners, so it never
+  // touches an action SHA. Renovate runs from yo61/infrastructure's workflow, whose cron is the
+  // only schedule; do not add a `schedule`.
+  extends: ["config:recommended"],
+  enabledManagers: ["github-actions", "mise"],
+
+  // Policy shared by every repository Renovate updates; keep the copies alike.
+  semanticCommits: "enabled",
+  dependencyDashboard: true,
+  minimumReleaseAge: "7 days",
+  minimumReleaseAgeBehaviour: "timestamp-optional",
+  prHourlyLimit: 0,
+  prConcurrentLimit: 10,
+  osvVulnerabilityAlerts: true,
+  vulnerabilityAlerts: {
+    semanticCommitType: "fix",
+    labels: ["security"],
+  },
+
+  packageRules: [
+    {
+      matchUpdateTypes: ["major"],
+      minimumReleaseAge: "14 days",
+    },
+    {
+      // Action SHAs are Dependabot's; only runs-on images are Renovate's.
+      matchManagers: ["github-actions"],
+      matchDatasources: ["!github-runners"],
+      enabled: false,
+    },
+    {
+      matchFileNames: [".github/workflows/**"],
+      semanticCommitScope: "ci",
+    },
+  ],
+}

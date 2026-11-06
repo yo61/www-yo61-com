@@ -22,6 +22,12 @@ pnpm types:check    # astro sync, tsc and astro check
 `pnpm-workspace.yaml` refuses any package published less than 24 hours ago and runs no install
 scripts.
 
+## Version bumps
+
+Dependabot owns npm, the action SHAs and the pre-commit hooks (`.github/dependabot.yaml`).
+Renovate owns the `mise.toml` tools and the `runs-on` image (`renovate.json5`). It runs from
+`yo61/infrastructure`'s Renovate workflow, which lists this repository in `RENOVATE_TARGETS`.
+
 ## Security headers
 
 The Content Security Policy comes in two halves:
@@ -38,4 +44,5 @@ The CSP already allows Cloudflare Web Analytics' two origins, ready for its beac
 no other third party. Pages carry no inline `style=` attributes, which the CSP would refuse.
 
 `pnpm build` runs `scripts/check-build.ts` over `dist/`; its `checkBuild` docstring lists what
-fails the build.
+fails the build. It holds its own copy of both CSP halves and the HSTS max-age, so a change to
+either goes in `check-build.ts` too (`decisions/2026-11-06-build-check-csp-values.md`).
