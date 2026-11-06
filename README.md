@@ -25,8 +25,9 @@ scripts.
 ## Version bumps
 
 Dependabot owns npm, the action SHAs and the pre-commit hooks (`.github/dependabot.yaml`).
-Renovate owns the `mise.toml` tools and the `runs-on` image (`renovate.json5`). It runs from
-`yo61/infrastructure`'s Renovate workflow, which lists this repository in `RENOVATE_TARGETS`.
+Renovate owns the `mise.toml` tools, the `runs-on` image and the mise version `jdx/mise-action`
+installs (`renovate.json5`). It runs from `yo61/infrastructure`'s Renovate workflow, which lists
+this repository in `RENOVATE_TARGETS`.
 
 ## Security headers
 

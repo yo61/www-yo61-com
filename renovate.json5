@@ -2,10 +2,10 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
 
   // Dependabot keeps npm, the action SHAs and the pre-commit hooks (.github/dependabot.yaml), and
-  // supports neither mise.toml nor runner images. Renovate owns those two: the mise.toml tools
-  // and the workflows' runs-on image. github-actions runs only for github-runners, so it never
-  // touches an action SHA. Renovate runs from yo61/infrastructure's workflow, whose cron is the
-  // only schedule; do not add a `schedule`.
+  // supports neither mise.toml nor runner images. Renovate owns the mise.toml tools, and in the
+  // workflows the runs-on image and the mise version mise-action installs, never an action SHA.
+  // It runs from yo61/infrastructure's workflow, whose cron is the only schedule; do not add a
+  // `schedule`.
   extends: ["config:recommended"],
   enabledManagers: ["github-actions", "mise"],
 
@@ -28,10 +28,18 @@
       minimumReleaseAge: "14 days",
     },
     {
-      // Action SHAs are Dependabot's; only runs-on images are Renovate's.
+      // Action SHAs are Dependabot's; Renovate's are runs-on images and, below, jdx/mise.
       matchManagers: ["github-actions"],
       matchDatasources: ["!github-runners"],
       enabled: false,
+    },
+    {
+      // mise-action's `version` input, in every workflow, moves in one PR.
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["uses-with"],
+      matchDepNames: ["jdx/mise"],
+      enabled: true,
+      groupName: "mise",
     },
     {
       matchFileNames: [".github/workflows/**"],
