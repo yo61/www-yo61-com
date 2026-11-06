@@ -124,6 +124,36 @@ describe("checkBuild", () => {
     ]);
   });
 
+  it("reads the real CSP meta tag, not a copy in a comment or text block", () => {
+    const loose = cspMetaTag(
+      policy.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'"),
+    );
+    const wrappers = [
+      ["<!-- ", " -->"],
+      ["<script>", "</script>"],
+      ["<style>", "</style>"],
+      ["<pre>", "</pre>"],
+      ["<code>", "</code>"],
+    ];
+    for (const [open, close] of wrappers) {
+      const hidden = `${open}${csp}${close}`;
+      expect(checkBuild(goodBuild({ "index.html": page("", hidden) }))).toEqual([
+        "index.html has no Content-Security-Policy meta tag",
+      ]);
+      expect(checkBuild(goodBuild({ "index.html": page("", `${hidden}${loose}`) }))).toEqual([
+        "index.html's Content-Security-Policy meta tag sets script-src 'self' 'unsafe-inline' " +
+          "https://static.cloudflareinsights.com, not 'self' https://static.cloudflareinsights.com",
+      ]);
+    }
+  });
+
+  it("checks every CSP meta tag on a page", () => {
+    const loose = cspMetaTag(policy.replace("img-src 'self'", "img-src *"));
+    expect(checkBuild(goodBuild({ "index.html": page("", `${csp}${loose}`) }))).toEqual([
+      "index.html's Content-Security-Policy meta tag sets img-src *, not 'self'",
+    ]);
+  });
+
   it("reports a CSP meta tag that drops a directive or adds one", () => {
     const changed = policy.replace("img-src 'self'", "worker-src *");
     expect(checkBuild(goodBuild({ "404.html": page("", cspMetaTag(changed)) }))).toEqual([
@@ -175,6 +205,38 @@ describe("checkBuild", () => {
     expect(checkBuild(goodBuild({ _headers: withoutFrameAncestors }))).toEqual([
       "_headers' Content-Security-Policy for /* sets no frame-ancestors",
       "_headers' Content-Security-Policy for /* sets no base-uri",
+    ]);
+  });
+
+  it("reports _headers detaching the CSP or HSTS on any path", () => {
+    const detached = `${headers}
+/blog/*
+  ! Content-Security-Policy
+https://:project.pages.dev/*
+  !strict-transport-security
+`;
+    expect(checkBuild(goodBuild({ _headers: detached }))).toEqual([
+      "_headers detaches Content-Security-Policy for /blog/*",
+      "_headers detaches strict-transport-security for https://:project.pages.dev/*",
+    ]);
+  });
+
+  it("allows _headers to detach other headers, or add a CSP, on other paths", () => {
+    const other = `${headers}
+/*.jpg
+  ! X-Robots-Tag
+  Content-Security-Policy: sandbox
+`;
+    expect(checkBuild(goodBuild({ _headers: other }))).toEqual([]);
+  });
+
+  it("reports HSTS set on another path, which Pages joins to the /* value", () => {
+    const joined = `${headers}
+/blog/*
+  Strict-Transport-Security: max-age=0
+`;
+    expect(checkBuild(goodBuild({ _headers: joined }))).toEqual([
+      "_headers sets Strict-Transport-Security for /blog/*, which Pages joins to the /* value",
     ]);
   });
 
