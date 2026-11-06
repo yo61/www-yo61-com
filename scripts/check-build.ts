@@ -4,9 +4,11 @@ import { join, relative } from "node:path";
 const checkOrigin = "https://check.invalid";
 const siteOrigin = "https://www.yo61.com";
 const robotsMeta = /<meta\s+name="robots"\s+content="([^"]*)"/i;
-const cspMeta = /<meta\s+http-equiv="content-security-policy"\s+content="([^"]*)"/i;
+const cspMeta = /<meta\s+http-equiv="content-security-policy"\s+content="([^"]*)"/gi;
+const htmlComment = /<!--.*?-->/gs;
 const hashSource = /^'sha(?:256|384|512)-/;
 const hashedDirectives = new Set(["script-src", "style-src"]);
+const guardedDetach = /^!\s*(content-security-policy|strict-transport-security)\s*$/i;
 const hstsMaxAge = /^\s*max-age\s*=\s*"?([^";\s]*)"?\s*$/i;
 const hstsYear = "31536000";
 const reference = /\s(?:href|src)="([^"]*)"/g;
@@ -110,20 +112,40 @@ function checkRobotsTxt(distDir: string): string[] {
     : [];
 }
 
-function headersFor(headersFile: string, pattern: string): string[] {
-  const values: string[] = [];
-  let inPattern = false;
+interface HeaderRule {
+  pattern: string;
+  header: string;
+}
+
+function headerRules(headersFile: string): HeaderRule[] {
+  const rules: HeaderRule[] = [];
+  let pattern = "";
   for (const line of headersFile.split("\n")) {
     if (line.trim() === "" || line.trim().startsWith("#")) {
       continue;
     }
     if (/^\S/.test(line)) {
-      inPattern = line.trim() === pattern;
-    } else if (inPattern) {
-      values.push(line.trim());
+      pattern = line.trim();
+    } else {
+      rules.push({ pattern, header: line.trim() });
     }
   }
-  return values;
+  return rules;
+}
+
+function checkEveryPath(rules: HeaderRule[]): string[] {
+  const problems: string[] = [];
+  for (const { pattern, header } of rules) {
+    const detached = guardedDetach.exec(header)?.[1];
+    if (detached !== undefined) {
+      problems.push(`_headers detaches ${detached} for ${pattern}`);
+    } else if (pattern !== "/*" && /^strict-transport-security:/i.test(header)) {
+      problems.push(
+        `_headers sets Strict-Transport-Security for ${pattern}, which Pages joins to the /* value`,
+      );
+    }
+  }
+  return problems;
 }
 
 function checkHeadersFile(distDir: string): string[] {
@@ -131,7 +153,8 @@ function checkHeadersFile(distDir: string): string[] {
   if (!existsSync(path)) {
     return ["_headers is missing"];
   }
-  const headers = headersFor(readFileSync(path, "utf8"), "/*");
+  const rules = headerRules(readFileSync(path, "utf8"));
+  const headers = rules.filter((rule) => rule.pattern === "/*").map((rule) => rule.header);
   const policies = headers
     .filter((header) => /^content-security-policy:/i.test(header))
     .map((header) => header.replace(/^[^:]*:/, ""));
@@ -142,6 +165,7 @@ function checkHeadersFile(distDir: string): string[] {
       headerPolicy,
     ),
     ...checkHsts(headers.filter((header) => /^strict-transport-security:/i.test(header))),
+    ...checkEveryPath(rules),
   ];
 }
 
@@ -207,16 +231,24 @@ function checkStylesheet(distDir: string, stylesheet: string): string[] {
   return checkReferences(distDir, stylesheet, targets);
 }
 
+function checkCspMeta(page: string, html: string): string[] {
+  const markup = html.replaceAll(htmlComment, "").replaceAll(notText, "");
+  const policies = Array.from(markup.matchAll(cspMeta), ([, policy = ""]) => policy);
+  if (policies.length === 0) {
+    return [`${page} has no Content-Security-Policy meta tag`];
+  }
+  return policies.flatMap((policy) =>
+    checkPolicy(`${page}'s Content-Security-Policy meta tag`, parsePolicy(policy), metaPolicy),
+  );
+}
+
 function checkPage(distDir: string, page: string): string[] {
   const html = readFileSync(join(distDir, page), "utf8");
   const noindex = robotsMeta.exec(html)?.[1]?.includes("noindex") ?? false;
   const text = html.replaceAll(notText, "");
-  const policy = cspMeta.exec(html)?.[1];
   return [
     ...(noindex ? [`${page} has a <meta name="robots"> containing noindex`] : []),
-    ...(policy === undefined
-      ? [`${page} has no Content-Security-Policy meta tag`]
-      : checkPolicy(`${page}'s Content-Security-Policy meta tag`, parsePolicy(policy), metaPolicy)),
+    ...checkCspMeta(page, html),
     ...checkReferences(
       distDir,
       page,
@@ -236,11 +268,11 @@ function checkPage(distDir: string, page: string): string[] {
 }
 
 /**
- * Checks a static build is fit to deploy to Cloudflare Pages: it has a 404.html, so Pages does
- * not serve the landing page for every path; robots.txt does not disallow all crawling and no
- * page carries a robots noindex meta tag; both CSP halves, Astro's meta tag on every page and
- * _headers for /*, match headerPolicy and metaPolicy exactly, hashes aside; HSTS for /* lasts a
- * year, no includeSubDomains or preload; no page has an inline style attribute; every own-origin
+ * Checks a static build is fit for Cloudflare Pages: it has a 404.html, so Pages does not serve
+ * the landing page for every path; robots.txt allows crawling and no page has a robots noindex;
+ * every real CSP meta tag and the _headers CSP for /* match metaPolicy and headerPolicy exactly,
+ * hashes aside; HSTS for /* lasts a year, no includeSubDomains or preload, and no path detaches
+ * the CSP or HSTS or sets HSTS again; no page has an inline style attribute; every own-origin
  * link, asset and Open Graph image, in a page or a stylesheet, resolves to a file in the build;
  * and no page's text, outside code, holds what a template failed to render.
  *
