@@ -4,14 +4,69 @@ import { join, relative } from "node:path";
 const checkOrigin = "https://check.invalid";
 const siteOrigin = "https://www.yo61.com";
 const robotsMeta = /<meta\s+name="robots"\s+content="([^"]*)"/i;
-const cspMeta = /<meta\s+http-equiv="content-security-policy"/i;
+const cspMeta = /<meta\s+http-equiv="content-security-policy"\s+content="([^"]*)"/i;
+const hashSource = /^'sha(?:256|384|512)-/;
+const hashedDirectives = new Set(["script-src", "style-src"]);
+const hstsMaxAge = /^\s*max-age\s*=\s*"?([^";\s]*)"?\s*$/i;
+const hstsYear = "31536000";
 const reference = /\s(?:href|src)="([^"]*)"/g;
 const ogImage = /<meta\s+property="og:image"\s+content="([^"]*)"/gi;
 const stylesheetUrl = /url\(\s*(["']?)([^"')]+)\1\s*\)/g;
 const notText = /<(script|style|pre|code)\b[^>]*>.*?<\/\1>/gis;
 const inlineStyle = /<[a-z][^>]*\sstyle=[^>]*>/gi;
-const headerDirectives = ["frame-ancestors", "base-uri", "object-src", "form-action"];
 const placeholder = /\{[\w.]+\}|\bTODO\b|\bundefined\b|\[object Object\]/g;
+
+// Restated, not read from _headers or astro.config.ts, so loosening either fails the check.
+const headerPolicy: Record<string, string> = {
+  "frame-ancestors": "'none'",
+  "base-uri": "'self'",
+  "object-src": "'none'",
+  "form-action": "'self'",
+};
+const metaPolicy: Record<string, string> = {
+  "default-src": "'none'",
+  "img-src": "'self'",
+  "font-src": "'self'",
+  "connect-src": "'self' https://cloudflareinsights.com",
+  "script-src": "'self' https://static.cloudflareinsights.com",
+  "style-src": "'self'",
+};
+
+function parsePolicy(policy: string): Map<string, string> {
+  const directives = new Map<string, string>();
+  for (const directive of policy.split(";")) {
+    const [name = "", ...sources] = directive.trim().split(/\s+/);
+    const key = name.toLowerCase();
+    if (name !== "" && !directives.has(key)) {
+      const hashed = hashedDirectives.has(key);
+      const kept = sources.filter((source) => !(hashed && hashSource.test(source)));
+      directives.set(key, kept.join(" "));
+    }
+  }
+  return directives;
+}
+
+function checkPolicy(
+  subject: string,
+  policy: Map<string, string>,
+  expected: Record<string, string>,
+): string[] {
+  const problems: string[] = [];
+  for (const [name, sources] of Object.entries(expected)) {
+    const actual = policy.get(name);
+    if (actual === undefined) {
+      problems.push(`${subject} sets no ${name}`);
+    } else if (actual !== sources) {
+      problems.push(`${subject} sets ${name} ${actual}, not ${sources}`);
+    }
+  }
+  for (const name of policy.keys()) {
+    if (!Object.hasOwn(expected, name)) {
+      problems.push(`${subject} sets ${name}, which check-build does not expect`);
+    }
+  }
+  return problems;
+}
 
 function filesEndingWith(dir: string, extension: string): string[] {
   const files: string[] = [];
@@ -77,22 +132,46 @@ function checkHeadersFile(distDir: string): string[] {
     return ["_headers is missing"];
   }
   const headers = headersFor(readFileSync(path, "utf8"), "/*");
-  const policies = headers.filter((header) => /^content-security-policy:/i.test(header));
+  const policies = headers
+    .filter((header) => /^content-security-policy:/i.test(header))
+    .map((header) => header.replace(/^[^:]*:/, ""));
   return [
-    ...headerDirectives
-      .filter((directive) => !policies.some((policy) => policy.includes(directive)))
-      .map((directive) => `_headers sets no Content-Security-Policy with ${directive} for /*`),
+    ...checkPolicy(
+      "_headers' Content-Security-Policy for /*",
+      parsePolicy(policies.join(";")),
+      headerPolicy,
+    ),
     ...checkHsts(headers.filter((header) => /^strict-transport-security:/i.test(header))),
   ];
 }
 
 function checkHsts(hsts: string[]): string[] {
-  if (hsts.length === 0) {
-    return ["_headers sets no Strict-Transport-Security for /*"];
+  const subject = "_headers' Strict-Transport-Security for /*";
+  const [header] = hsts;
+  if (header === undefined) {
+    return [`${subject} is missing`];
   }
-  return ["includeSubDomains", "preload"]
-    .filter((token) => hsts.some((header) => header.toLowerCase().includes(token.toLowerCase())))
-    .map((token) => `_headers' Strict-Transport-Security for /* carries ${token}`);
+  if (hsts.length > 1) {
+    return [`${subject} is sent ${hsts.length} times`];
+  }
+  const maxAges = header
+    .replace(/^[^:]*:/, "")
+    .split(";")
+    .flatMap((directive) => hstsMaxAge.exec(directive)?.[1] ?? []);
+  const problems: string[] = [];
+  if (maxAges.length === 0) {
+    problems.push(`${subject} sets no max-age`);
+  } else if (maxAges.length > 1) {
+    problems.push(`${subject} sets max-age ${maxAges.length} times`);
+  } else if (maxAges[0] !== hstsYear) {
+    problems.push(`${subject} sets max-age=${maxAges[0]}, not max-age=${hstsYear}`);
+  }
+  for (const token of ["includeSubDomains", "preload"]) {
+    if (header.toLowerCase().includes(token.toLowerCase())) {
+      problems.push(`${subject} carries ${token}`);
+    }
+  }
+  return problems;
 }
 
 function isFile(path: string): boolean {
@@ -132,9 +211,12 @@ function checkPage(distDir: string, page: string): string[] {
   const html = readFileSync(join(distDir, page), "utf8");
   const noindex = robotsMeta.exec(html)?.[1]?.includes("noindex") ?? false;
   const text = html.replaceAll(notText, "");
+  const policy = cspMeta.exec(html)?.[1];
   return [
     ...(noindex ? [`${page} has a <meta name="robots"> containing noindex`] : []),
-    ...(cspMeta.test(html) ? [] : [`${page} has no Content-Security-Policy meta tag`]),
+    ...(policy === undefined
+      ? [`${page} has no Content-Security-Policy meta tag`]
+      : checkPolicy(`${page}'s Content-Security-Policy meta tag`, parsePolicy(policy), metaPolicy)),
     ...checkReferences(
       distDir,
       page,
@@ -156,9 +238,9 @@ function checkPage(distDir: string, page: string): string[] {
 /**
  * Checks a static build is fit to deploy to Cloudflare Pages: it has a 404.html, so Pages does
  * not serve the landing page for every path; robots.txt does not disallow all crawling and no
- * page carries a robots noindex meta tag; both CSP halves are present, Astro's meta tag on every
- * page and frame-ancestors, base-uri, object-src and form-action in _headers for /*; HSTS for /*
- * has no includeSubDomains or preload; no page has an inline style attribute; every own-origin
+ * page carries a robots noindex meta tag; both CSP halves, Astro's meta tag on every page and
+ * _headers for /*, match headerPolicy and metaPolicy exactly, hashes aside; HSTS for /* lasts a
+ * year, no includeSubDomains or preload; no page has an inline style attribute; every own-origin
  * link, asset and Open Graph image, in a page or a stylesheet, resolves to a file in the build;
  * and no page's text, outside code, holds what a template failed to render.
  *
