@@ -60,7 +60,8 @@ owns, by Direct Upload (`wrangler pages deploy`). Three workflows:
 - `deploy` runs on every push to `main`, builds again and deploys to production. `main`'s
   ruleset requires `ci`'s `Site` and `Hooks` checks, so only a change whose `ci` passed lands.
 
-The Pages deploy token (Pages Edit only), the account id and the project name are secrets on the
-`preview` and `production` environments, which accept runs on `main` only; the repository holds
-none. Roll back a production deploy by restoring the previous deployment in Pages.
+The Pages deploy token (Pages Edit only) and the account id are secrets on the `preview` and
+`production` environments, which accept runs on `main` only; the repository holds none. The
+project name is a variable on the same environments, `CLOUDFLARE_PAGES_PROJECT`: as a secret,
+its value, which is also the repository's name, was masked as `***` throughout the logs. Roll back a production deploy by restoring the previous deployment in Pages.
 `decisions/2026-11-06-deploy-workflows.md` records why `preview` is shaped as it is.
