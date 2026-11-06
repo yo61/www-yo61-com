@@ -4,7 +4,20 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkBuild } from "#scripts/check-build.ts";
 
-const csp = `<meta http-equiv="content-security-policy" content="script-src 'self'">`;
+const policy = [
+  "default-src 'none'",
+  "img-src 'self'",
+  "font-src 'self'",
+  "connect-src 'self' https://cloudflareinsights.com",
+  " script-src 'self' https://static.cloudflareinsights.com 'sha256-xIb/Pa7FUshAu4ihwjc='",
+  " style-src 'self' 'sha256-1BvDVWLr3QCC20uHhUD='",
+].join(";");
+
+function cspMetaTag(content: string): string {
+  return `<meta http-equiv="content-security-policy" content="${content};">`;
+}
+
+const csp = cspMetaTag(policy);
 
 function page(body: string, head = csp): string {
   return `<!DOCTYPE html><html><head>${head}
@@ -103,6 +116,36 @@ describe("checkBuild", () => {
     ]);
   });
 
+  it("reports a CSP meta tag that loosens a directive", () => {
+    const loose = policy.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'");
+    expect(checkBuild(goodBuild({ "index.html": page("", cspMetaTag(loose)) }))).toEqual([
+      "index.html's Content-Security-Policy meta tag sets script-src 'self' 'unsafe-inline' " +
+        "https://static.cloudflareinsights.com, not 'self' https://static.cloudflareinsights.com",
+    ]);
+  });
+
+  it("reports a CSP meta tag that drops a directive or adds one", () => {
+    const changed = policy.replace("img-src 'self'", "worker-src *");
+    expect(checkBuild(goodBuild({ "404.html": page("", cspMetaTag(changed)) }))).toEqual([
+      "404.html's Content-Security-Policy meta tag sets no img-src",
+      "404.html's Content-Security-Policy meta tag sets worker-src, " +
+        "which check-build does not expect",
+    ]);
+  });
+
+  it("reads a CSP meta tag's first copy of a directive, as browsers do", () => {
+    const repeated = `${policy};script-src *`;
+    expect(checkBuild(goodBuild({ "index.html": page("", cspMetaTag(repeated)) }))).toEqual([]);
+  });
+
+  it("ignores hashes only in script-src and style-src", () => {
+    const hashed = policy.replace("img-src 'self'", "img-src 'self' 'sha256-AAAA='");
+    expect(checkBuild(goodBuild({ "index.html": page("", cspMetaTag(hashed)) }))).toEqual([
+      "index.html's Content-Security-Policy meta tag sets img-src 'self' 'sha256-AAAA=', " +
+        "not 'self'",
+    ]);
+  });
+
   it("reports a missing _headers file", () => {
     expect(checkBuild(goodBuild({ _headers: null }))).toEqual(["_headers is missing"]);
   });
@@ -114,32 +157,77 @@ describe("checkBuild", () => {
   Content-Security-Policy: frame-ancestors 'none'
 `;
     expect(checkBuild(goodBuild({ _headers: other }))).toEqual([
-      "_headers sets no Content-Security-Policy with frame-ancestors for /*",
-      "_headers sets no Content-Security-Policy with base-uri for /*",
-      "_headers sets no Content-Security-Policy with object-src for /*",
-      "_headers sets no Content-Security-Policy with form-action for /*",
-      "_headers sets no Strict-Transport-Security for /*",
+      "_headers' Content-Security-Policy for /* sets no frame-ancestors",
+      "_headers' Content-Security-Policy for /* sets no base-uri",
+      "_headers' Content-Security-Policy for /* sets no object-src",
+      "_headers' Content-Security-Policy for /* sets no form-action",
+      "_headers' Strict-Transport-Security for /* is missing",
     ]);
   });
 
   it("reports _headers missing either CSP line for every path", () => {
     const withoutObjectSrc = headers.replace(/^.*object-src.*\n/m, "");
     expect(checkBuild(goodBuild({ _headers: withoutObjectSrc }))).toEqual([
-      "_headers sets no Content-Security-Policy with object-src for /*",
-      "_headers sets no Content-Security-Policy with form-action for /*",
+      "_headers' Content-Security-Policy for /* sets no object-src",
+      "_headers' Content-Security-Policy for /* sets no form-action",
     ]);
     const withoutFrameAncestors = headers.replace(/^.*frame-ancestors.*\n/m, "");
     expect(checkBuild(goodBuild({ _headers: withoutFrameAncestors }))).toEqual([
-      "_headers sets no Content-Security-Policy with frame-ancestors for /*",
-      "_headers sets no Content-Security-Policy with base-uri for /*",
+      "_headers' Content-Security-Policy for /* sets no frame-ancestors",
+      "_headers' Content-Security-Policy for /* sets no base-uri",
+    ]);
+  });
+
+  it("reports a _headers CSP directive with the wrong value", () => {
+    const loose = headers.replace("object-src 'none'", "object-src 'self'");
+    expect(checkBuild(goodBuild({ _headers: loose }))).toEqual([
+      "_headers' Content-Security-Policy for /* sets object-src 'self', not 'none'",
     ]);
   });
 
   it("reports _headers without HSTS for every path", () => {
     const withoutHsts = headers.replace(/^.*Strict-Transport-Security.*\n/m, "");
     expect(checkBuild(goodBuild({ _headers: withoutHsts }))).toEqual([
-      "_headers sets no Strict-Transport-Security for /*",
+      "_headers' Strict-Transport-Security for /* is missing",
     ]);
+  });
+
+  it("reports HSTS with any max-age but a year's", () => {
+    const short = headers.replace("max-age=31536000", "max-age=300");
+    expect(checkBuild(goodBuild({ _headers: short }))).toEqual([
+      "_headers' Strict-Transport-Security for /* sets max-age=300, not max-age=31536000",
+    ]);
+    const none = headers.replace("max-age=31536000", "preload");
+    expect(checkBuild(goodBuild({ _headers: none }))).toEqual([
+      "_headers' Strict-Transport-Security for /* sets no max-age",
+      "_headers' Strict-Transport-Security for /* carries preload",
+    ]);
+  });
+
+  it("reports HSTS whose max-age a browser would not read as a year", () => {
+    const twice = headers.replace("max-age=31536000", "max-age=31536000; max-age=0");
+    expect(checkBuild(goodBuild({ _headers: twice }))).toEqual([
+      "_headers' Strict-Transport-Security for /* sets max-age 2 times",
+    ]);
+    const lookalike = headers.replace("max-age=31536000", "foo-max-age=31536000; max-age=0");
+    expect(checkBuild(goodBuild({ _headers: lookalike }))).toEqual([
+      "_headers' Strict-Transport-Security for /* sets max-age=0, not max-age=31536000",
+    ]);
+  });
+
+  it("reports HSTS sent more than once", () => {
+    const repeated = headers.replace(
+      "max-age=31536000",
+      "max-age=31536000\n  Strict-Transport-Security: max-age=0",
+    );
+    expect(checkBuild(goodBuild({ _headers: repeated }))).toEqual([
+      "_headers' Strict-Transport-Security for /* is sent 2 times",
+    ]);
+  });
+
+  it("reads an HSTS max-age that is spaced or quoted", () => {
+    const spaced = headers.replace("max-age=31536000", 'Max-Age = "31536000" ');
+    expect(checkBuild(goodBuild({ _headers: spaced }))).toEqual([]);
   });
 
   it("reports HSTS that reaches subdomains or asks for preload", () => {
