@@ -47,3 +47,20 @@ includes the beacon, `beacon.min.js`, by hand, with the token from `yo61/infrast
 `pnpm build` runs `scripts/check-build.ts` over `dist/`; its `checkBuild` docstring lists what
 fails the build. It holds its own copy of both CSP halves and the HSTS max-age, so a change to
 either goes in `check-build.ts` too (`decisions/2026-11-06-build-check-csp-values.md`).
+
+## Deployment
+
+The site deploys to the Cloudflare Pages project `www-yo61-com`, which `yo61/infrastructure`
+owns, by Direct Upload (`wrangler pages deploy`). Three workflows:
+
+- `ci` lints, tests and builds every pull request, then uploads `dist/` as the `site` artifact.
+  It holds no secrets.
+- `preview` runs when `ci` passes on a pull request from a branch in this repository, and
+  deploys that artifact to `<branch alias>.www-yo61-com.pages.dev`.
+- `deploy` runs on every push to `main`, builds again and deploys to production. `main`'s
+  ruleset requires `ci`'s `Site` and `Hooks` checks, so only a change whose `ci` passed lands.
+
+The Pages deploy token (Pages Edit only), the account id and the project name are secrets on the
+`preview` and `production` environments, which accept runs on `main` only; the repository holds
+none. Roll back a production deploy by restoring the previous deployment in Pages.
+`decisions/2026-11-06-deploy-workflows.md` records why `preview` is shaped as it is.

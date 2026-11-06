@@ -1,0 +1,66 @@
+name: Preview
+
+on:
+  # Runs main's copy of this file; the PR supplies only CI's built files.
+  # jactionlint ignore=dangerous-triggers
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy
+    # Never a fork's branch, main (Cloudflare would publish it as production), or Dependabot's.
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.head_branch != 'main'
+      && github.event.workflow_run.actor.login != 'dependabot[bot]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # On the job, so a skipped run waits on nothing; the latest build of a branch deploys last.
+    concurrency:
+      group: preview-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    # The Cloudflare secrets live only on environments that accept runs on main.
+    environment: preview
+    permissions:
+      actions: read # to download the artifact from CI's run
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          install_args: node pnpm
+          cache: false
+      # Installs wrangler from main's lockfile.
+      - run: pnpm install --frozen-lockfile
+      # Outside the workspace, so the artifact cannot replace anything this job runs.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: ${{ runner.temp }}/site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      # wrangler would deploy a _worker.js as the preview's Worker, running the PR's code.
+      - name: Refuse a Worker
+        run: |
+          if [ -e "$RUNNER_TEMP/site/_worker.js" ]; then
+            echo "::error::The site holds _worker.js; previews deploy static files only." >&2
+            exit 1
+          fi
+      # Deploys to <branch alias>.<project>.pages.dev.
+      - run: >-
+          pnpm exec wrangler pages deploy "$RUNNER_TEMP/site" --project-name="$PROJECT"
+          --branch="$BRANCH" --commit-hash="$COMMIT"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
