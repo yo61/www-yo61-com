@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
         with:
-          version: 2026.10.24
+          version: 2026.10.25
           install_args: node pnpm
       - run: pnpm install --frozen-lockfile
       # Fails on a known vulnerability, moderate or worse, in any installed package.
@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
       - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
         with:
-          version: 2026.10.24
+          version: 2026.10.25
           install_args: prek
       - run: prek run --all-files --show-diff-on-failure --color=always
         env:
