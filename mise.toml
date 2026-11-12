@@ -1,5 +1,5 @@
 [tools]
 # Read by CI through jdx/mise-action, so a runner and a dev box run the same versions.
 node = "26.13.0"
-pnpm = "12.17.0"
+pnpm = "12.18.0"
 prek = "0.5.10"
