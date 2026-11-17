@@ -71,3 +71,17 @@ environments"); global CLAUDE.md (GitHub Actions)
 ## Source: global CLAUDE.md (git workflow)
 
 ## Last triggered: 2026-11-06 (YO61-41's first commit bundled the beacon and the workflows)
+
+## Category: Dependency installs
+
+## Criteria:
+
+    - A change that adds or tightens an install-time runtime gate (`engines`, `engineStrict`,
+      `packageManager`, a Node version check) explains how Dependabot's updater, which ignores
+      `mise.toml`, still installs
+
+## Severity: warning
+
+## Source: decisions/2026-11-16-engine-strict.md
+
+## Last triggered: never
