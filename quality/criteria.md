@@ -85,3 +85,16 @@ environments"); global CLAUDE.md (GitHub Actions)
 ## Source: decisions/2026-11-16-engine-strict.md
 
 ## Last triggered: never
+
+## Category: Audit exceptions
+
+## Criteria:
+
+    - Every `auditConfig.ignoreGhsas` entry in `pnpm-workspace.yaml` has a decision record in
+      `/decisions/` that explains why the advisory cannot be reached and when to remove the entry
+
+## Severity: blocking
+
+## Source: decisions/2026-11-18-audit-ignore-picomatch.md (pnpm does not expire an ignore)
+
+## Last triggered: 2026-11-18 (GHSA-fc5q-39xc-vjpf, #29)
