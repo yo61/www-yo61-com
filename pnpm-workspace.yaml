@@ -5,3 +5,8 @@ minimumReleaseAge: 1440
 ignoreScripts: true
 
 savePrefix: ""
+
+# Drop an entry once its fix ships; see decisions/2026-11-18-audit-ignore-picomatch.md.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
