@@ -11,7 +11,7 @@
 
 ## Source: global CLAUDE.md (zero warnings policy); YO61-25 (the build check is the site's seam)
 
-## Last triggered: never
+## Last triggered: 2026-11-27 (#43, `pnpm types:check` failed on a mismatched emnapi pair)
 
 ## Category: Security headers
 
